@@ -10,7 +10,7 @@ import os
 import logging
 
 SAVE_PATH = 'ebaySpiderData'
-KEYWORDS = ['keyword 1', 'keyword 2']
+KEYWORDS = ['b w speakers', 'dynaudio 1.3']
 INTERVAL = 100
 SEND_TO = 'someBody'
 
@@ -35,16 +35,24 @@ def check_page(keywords, path):
                 '_ipg': 200
                 }
 
-        r = requests.get(url, params, headers=headers)
+        try:
+            r = requests.get(url, params, headers=headers)
+        except Exception as e:
+            logger.error(str(e))
+            continue
         logger.info("Searching for %s new items." % keyword)
         soup = BeautifulSoup(r.content, 'lxml')
         pages_url = gat_pages_url(soup)
-        items = soup.find_all(name='div', attrs={'class': 's-item__info clearfix'})
+        items = soup.find_all(name='li', attrs={'class': 'sresult lvresult clearfix li'})
         for page_url in pages_url:
-            r = requests.get(page_url, headers=headers)
+            try:
+                r = requests.get(page_url, headers=headers)
+            except Exception as e:
+                logger.error(str(e))
+                continue
             temp_soup = BeautifulSoup(r.content, 'lxml')
             temp_items = temp_soup.find_all(
-                    name='div', attrs={'class': 's-item__info clearfix'}
+                    name='li', attrs={'class': 'sresult lvresult clearfix li'}
                     )
             items.extend(temp_items)
         items_list = map(get_item_attrs, items)
@@ -57,16 +65,16 @@ def check_page(keywords, path):
 
 def gat_pages_url(soup):
     pagination_tags = soup.find_all(
-            name='li', attrs={'class': 'x-pagination__li'}
+            name='td', attrs={'class': 'pages'}
             )
     return [tag.a.get('href') for tag in pagination_tags[1:]]
 
 
 def get_item_attrs(item_tag):
-    item_title = item_tag.a.text
+    item_title = item_tag.h3.a.text
     item_price = item_tag.find(
-            name='span', attrs={'class': 's-item__price'}
-            ).text
+            name='li', attrs={'class': 'lvprice prc'}
+            ).span.text.lstrip('\n')
     item_url = item_tag.a.get('href', 'N/A')
     return (item_title, item_price, item_url)
 
@@ -94,10 +102,8 @@ def wechat_client():
                 message = '%s: Found %d new items at %s' \
                         % (key, len(new_items_set), time.ctime())
                 logger.info("Found %d new items." % len(new_items_set))
-                number = 1
-                for new_item in new_items_set:
-                    message += "\n\n" + str(number) + "." + "\n".join(new_item)
-                    number += 1
+                for index, new_item in enumerate(new_items_set):
+                    message += "\n\n" + str(index+1) + "." + "\n".join(new_item)
                 logger.info("Sending wechat message to %s." % to_user_name)
                 itchat.send(message, toUserName=to_user_name)
         time.sleep(INTERVAL)
